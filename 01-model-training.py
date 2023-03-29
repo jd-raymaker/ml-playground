@@ -42,17 +42,18 @@ def early_stopping_step(val_loss, model, early_stopping):
 
     if early_stopping.best_score is None:
         early_stopping.best_score = score
-        save_checkpoint(val_loss, model, early_stopping)
-    elif score < early_stopping.best_score:
+
+    if score < early_stopping.best_score:
         early_stopping.counter += 1
-        if early_stopping.counter >= early_stopping.patience:
-            if early_stopping.verbose:
-                print(f'Validation loss did not improve enough after {early_stopping.patience} epochs. '
-                f'Stopping the training.')
-            early_stopping.early_stop = True
+        if early_stopping.counter < early_stopping.patience:
+            return early_stopping
+        if early_stopping.verbose:
+            print(f'Validation loss did not improve enough after {early_stopping.patience} epochs. '
+            f'Stopping the training.')
+        early_stopping.early_stop = True
     else:
         early_stopping.best_score = score
-        early_stopping.patience = early_stopping.patience + early_stopping.patience_increase
+        early_stopping.patience += early_stopping.patience_increase
         save_checkpoint(val_loss, model, early_stopping)
         early_stopping.counter = 0
     
@@ -77,7 +78,7 @@ def train(model, device, train_loader, optimizer, criterion, epoch):
 
     return train_loss
 
-def validate(model, device, val_loader, criterion, epoch, patience, early_stopping):
+def validate(model, device, val_loader, criterion, early_stopping):
     model.eval()
     val_loss = 0
     with torch.no_grad():
@@ -134,25 +135,19 @@ def main():
     model = Net().to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.CrossEntropyLoss()
-    patience = 10
-    patience_increase=5
-    num_epochs = 100
-    early_stopping = EarlyStopping(patience, patience_increase, verbose=True)
+    early_stopping = EarlyStopping(patience=10, patience_increase=5, verbose=True)
 
-    for epoch in range(1, num_epochs + 1):
-      train_loss = train(model, device, train_loader, optimizer, criterion, epoch)
-      val_loss = validate(model, device, val_loader, criterion, epoch, patience, early_stopping)
-      early_stopping = early_stopping_step(val_loss, model, early_stopping)
+    for epoch in range(1, 1000):
+        train_loss = train(model, device, train_loader, optimizer, criterion, epoch)
+        val_loss = validate(model, device, val_loader, criterion, early_stopping)
+        early_stopping = early_stopping_step(val_loss, model, early_stopping)
 
-      if early_stopping.early_stop:
-          break
+        if early_stopping.early_stop:
+            break
 
-    # Load the best checkpoint.
-    model.load_state_dict(torch.load('checkpoint.pt'))
-
-    # Test the model on the test set.
+    # Load and test the best checkpoint.
+    model.load_state_dict(torch.load(early_stopping.path))
     test(model, device, test_loader)
 
 if __name__ == '__main__':
     main()
-
